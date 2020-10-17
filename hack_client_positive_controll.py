@@ -41,5 +41,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     print('data sent')
 
     data = s.recv(1024)
+    print("data = ", data)
 
 print('Received', repr(data))
