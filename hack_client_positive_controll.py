@@ -1,5 +1,6 @@
 
-
+# note: the there are two different keys, one is the guessed full-length key,
+# the other one is part key.
 import socket
 import hmac
 import hashlib
